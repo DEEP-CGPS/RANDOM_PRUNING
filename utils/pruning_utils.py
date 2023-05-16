@@ -5,7 +5,7 @@ import torch.nn as nn
 import simplify
 from torchsummary import summary
 import torch.nn.utils.prune as prune
-
+torch.manual_seed(23)
 
 def prune_model(model, args):
     if not os.path.exists("models"):
