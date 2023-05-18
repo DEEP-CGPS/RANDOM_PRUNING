@@ -5,11 +5,12 @@ import torch.nn as nn
 import simplify
 from torchsummary import summary
 import torch.nn.utils.prune as prune
-torch.manual_seed(23)
+
 
 def prune_model(model, args):
     if not os.path.exists("models"):
             os.makedirs("models")
+    torch.manual_seed(args.seed)
     pos = 0
     model.to(args.device)
     model.eval()
@@ -25,4 +26,4 @@ def prune_model(model, args):
 
     simplify.simplify(model, torch.ones((1, 3, 224, 224)).to(args.device), fuse_bn=False)
 
-    torch.save(model,f'models/{args.pruned_model_name}.pth')
+    torch.save(model,f'models/{args.model_architecture}_{args.dataset}_{args.model_type}.pth')

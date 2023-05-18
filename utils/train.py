@@ -150,4 +150,6 @@ def train_model(args,
 
         if best_model_acc < test_acc:
             best_model_acc = test_acc
-            torch.save(model,f'models/{args.model_name}.pth')
+            model_name = f'{args.model_architecture}_{args.dataset}_{args.model_type}'
+            print(f"Model Name: {model_name}")
+            torch.save(model,f'models/{model_name}.pth')
