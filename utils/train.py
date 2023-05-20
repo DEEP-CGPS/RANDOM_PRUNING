@@ -7,6 +7,7 @@ from torchvision import transforms
 from tqdm import tqdm
 import torch.nn as nn
 from torcheval.metrics.functional import binary_f1_score, binary_accuracy
+from utils.custom_dataset import dataset_list, CustomDataset
 
 def get_model(args):
     if args.model_architecture == "ResNet18":
@@ -27,6 +28,14 @@ def get_dataset(args):
                                                 download=True, transform=transform)
         testset = torchvision.datasets.CIFAR10(root='./data', train=False,
                                            download=True, transform=transform)
+    elif args.dataset == "Tomato_Leaves":
+        data_dir = "./data/Tomato_Leaves"
+        train_list, test_list, class_names = dataset_list(data_dir)
+        
+        
+        trainset = CustomDataset(train_list,transform)
+        testset = CustomDataset(test_list,transform)       
+ 
         
     train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
                                           shuffle=True, num_workers=0)
@@ -136,12 +145,16 @@ def train_model(args,
     history = {'train_loss': [], 'test_loss': [],'train_acc':[],'test_acc':[]}
 
     best_model_acc = 0
-
+    
+    start_time = time.time()
     for epoch in range(args.num_epochs):
+        
         train_loss, train_acc = train_epoch(model, args.device, train_loader, criterion, optimizer)
         test_loss, test_acc = test_epoch(model,  args.device, test_loader, criterion)
 
-        print(f"Epoch: [{epoch + 1}/{args.num_epochs}]\t || Training Loss: {train_loss:.3f}\t || Val Loss: {test_loss:.3f}\t || Training Acc: {train_acc:.2f}% \t ||  Val Acc {test_acc:.2f}%")
+        end_time = time.time() - start_time
+        
+        print(f"Epoch: [{epoch + 1}/{args.num_epochs}]\t || Training Loss: {train_loss:.3f}\t || Val Loss: {test_loss:.3f}\t || Training Acc: {train_acc:.2f}% \t ||  Val Acc: {test_acc:.2f}% \t || Time: {time.strftime('%H:%M:%S', time.gmtime(end_time))}")
 
         history['train_loss'].append(train_loss)
         history['test_loss'].append(test_loss)
