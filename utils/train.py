@@ -6,8 +6,14 @@ import torchvision
 from torchvision import transforms
 from tqdm import tqdm
 import torch.nn as nn
-from torcheval.metrics.functional import binary_f1_score, binary_accuracy
+from torcheval.metrics.functional import multiclass_f1_score, multiclass_accuracy
 from utils.custom_dataset import dataset_list, CustomDataset
+
+
+##===================================================================================##
+##===================================================================================##
+##===================================================================================##
+
 
 def get_model(args):
     if args.model_architecture == "ResNet18":
@@ -15,6 +21,11 @@ def get_model(args):
     elif args.model_architecture == "VGG16":
         model = torchvision.models.vgg16_bn(weights="VGG16_BN_Weights.IMAGENET1K_V1") 
     return model
+
+
+##===================================================================================##
+##===================================================================================##
+##===================================================================================##
 
 
 def get_dataset(args):
@@ -28,23 +39,34 @@ def get_dataset(args):
                                                 download=True, transform=transform)
         testset = torchvision.datasets.CIFAR10(root='./data', train=False,
                                            download=True, transform=transform)
+        num_classes = len(trainset.classes)
+        
+        
     elif args.dataset == "Tomato_Leaves":
         data_dir = "./data/Tomato_Leaves"
         train_list, test_list, class_names = dataset_list(data_dir)
-        
+        num_classes = len(class_names)
         
         trainset = CustomDataset(train_list,transform)
-        testset = CustomDataset(test_list,transform)       
- 
+        testset = CustomDataset(test_list,transform)  
+        
         
     train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
                                           shuffle=True, num_workers=0)
     test_loader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size,
                                              shuffle=False, num_workers=0)
-    return train_loader,test_loader
+        
+    return train_loader,test_loader, num_classes
+ 
+        
 
 
-def train_epoch(model, device, data_loader, criterion, optimizer):
+##===================================================================================##
+##===================================================================================##
+##===================================================================================##
+
+
+def train_epoch(model, device, data_loader, criterion, optimizer, eval_metric, num_classes = 0):
     """train_loss, accuracy = train_epoch(model, device, data_loader, criterion, optimizer)
     
     Function for each training epoch.
@@ -64,32 +86,51 @@ def train_epoch(model, device, data_loader, criterion, optimizer):
     train_correct = 0
     running_loss = 0.0
     total = 0
+    total_labels = []
+    total_outs = []
     model.train()
     
     for inputs, labels in data_loader:
         inputs = inputs.to(device)
         labels = labels.to(device)
-        outputs = model(inputs)
         
-        _, predicted = torch.max(outputs, 1)
+        output = model(inputs)
+        _, predicted = torch.max(output, 1)
         total += labels.size(0)
         train_correct += (predicted == labels).sum().item()
-        loss = criterion(outputs, labels)
+        loss = criterion(output, labels)
         running_loss += loss.item()
         
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         
-    accuracy = 100 * train_correct / total
+        total_labels.append(labels)
+        total_outs.append(predicted)
+        
+    
     train_loss = running_loss / len(data_loader)
     
-    return train_loss, accuracy
+    if eval_metric == "accuracy":
+        train_acc = 100 * train_correct / total
+        return train_loss, train_acc
+    
+    elif eval_metric == "f1_score":
+        total_labels = torch.cat(total_labels, dim=0)
+        total_outs = torch.cat(total_outs, dim=0)
+        total_outs[total_outs > num_classes-1] = num_classes-1
+        
+        train_f1s = multiclass_f1_score(total_outs, total_labels, num_classes = num_classes, average = "macro")
+        #accuracy = multiclass_accuracy(total_outs, total_labels, num_classes = num_classes) * 100
+        return train_loss, train_f1s
+    
+
+##===================================================================================##
+##===================================================================================##
+##===================================================================================##
 
 
-
-
-def test_epoch(model, device, data_loader, criterion):
+def test_epoch(model, device, data_loader, criterion, eval_metric, num_classes = 0):
     """train_loss, accuracy = validation_epoch(model, device, data_loader, criterion)
     
     Function for each training epoch.
@@ -108,27 +149,50 @@ def test_epoch(model, device, data_loader, criterion):
     model.eval()
     running_loss = 0
     total = 0
+    total_labels = []
+    total_outs = []
+    
     for inputs, labels in data_loader:
         inputs = inputs.to(device)
         labels = labels.to(device)
         
         output = model(inputs)
-        loss = criterion(output,labels)
+        _, predicted = torch.max(output.data,1)
         total += labels.size(0)
+        val_correct += (predicted == labels).sum().item()
+        loss = criterion(output,labels)
         running_loss += loss.item()
-        _, predictions = torch.max(output.data,1)
-        val_correct += (predictions == labels).sum().item()
         
-    val_acc = 100 * val_correct / total
-    val_loss = running_loss / len(data_loader)
+        total_labels.append(labels)
+        total_outs.append(predicted)
     
-    return val_loss, val_acc
+    
+    val_loss = running_loss / len(data_loader)
+        
+    if eval_metric == "accuracy":
+        val_acc = 100 * val_correct / total
+        return val_loss, val_acc
+    
+    elif eval_metric == "f1_score":
+        total_labels = torch.cat(total_labels, dim=0)
+        total_outs = torch.cat(total_outs, dim=0)
+        total_outs[total_outs > num_classes-1] = num_classes-1
+        
+        val_f1s = multiclass_f1_score(total_outs.cpu(), total_labels.cpu(), num_classes = num_classes, average = "macro")
+        #accuracy = multiclass_accuracy(total_outs, total_labels, num_classes = num_classes) * 100
+        return val_loss, val_f1s
+    
+
+##===================================================================================##
+##===================================================================================##
+##===================================================================================##
+
 
 def train_model(args,
                 train_loader = None,
                 test_loader = None,
-                model = None
-                 ):
+                model = None,
+                num_classes = 0):
     
     if not os.path.exists("models"):
         os.makedirs("models")
@@ -142,27 +206,43 @@ def train_model(args,
         optimizer = torch.optim.Adam(model.parameters(), lr= args.learning_rate)
 
     # Training Loop
-    history = {'train_loss': [], 'test_loss': [],'train_acc':[],'test_acc':[]}
-
     best_model_acc = 0
+    best_model_f1s = 0
     
     start_time = time.time()
     for epoch in range(args.num_epochs):
         
-        train_loss, train_acc = train_epoch(model, args.device, train_loader, criterion, optimizer)
-        test_loss, test_acc = test_epoch(model,  args.device, test_loader, criterion)
-
-        end_time = time.time() - start_time
         
-        print(f"Epoch: [{epoch + 1}/{args.num_epochs}]\t || Training Loss: {train_loss:.3f}\t || Val Loss: {test_loss:.3f}\t || Training Acc: {train_acc:.2f}% \t ||  Val Acc: {test_acc:.2f}% \t || Time: {time.strftime('%H:%M:%S', time.gmtime(end_time))}")
+        if args.eval_metric == "accuracy":
+            
+            train_loss, train_acc = train_epoch(model, args.device, train_loader, criterion, optimizer, args.eval_metric)
+            test_loss, test_acc = test_epoch(model, args.device, test_loader, criterion, args.eval_metric)
 
-        history['train_loss'].append(train_loss)
-        history['test_loss'].append(test_loss)
-        history['train_acc'].append(train_acc)
-        history['test_acc'].append(test_acc) 
+            end_time = time.time() - start_time
+            
+            print(f"Epoch: [{epoch + 1}/{args.num_epochs}]\t || Training Loss: {train_loss:.3f}\t || Val Loss: {test_loss:.3f}\t || Training Acc: {train_acc:.2f}% \t ||  Val Acc: {test_acc:.2f}% \t || Time: {time.strftime('%H:%M:%S', time.gmtime(end_time))}")
+            
+            if best_model_acc < test_acc:
+                best_model_acc = test_acc
+                model_name = f'{args.model_architecture}_{args.dataset}_{args.model_type}'
+                print(f"Model Name: {model_name}")
+                torch.save(model,f'models/{model_name}.pth')
+            
+            
+        
+        elif args.eval_metric == "f1_score":
+            
+            train_loss, train_f1s = train_epoch(model, args.device, train_loader, criterion, optimizer, args.eval_metric, num_classes = num_classes)
+            test_loss, test_f1s = test_epoch(model, args.device, test_loader, criterion, args.eval_metric, num_classes = num_classes)
 
-        if best_model_acc < test_acc:
-            best_model_acc = test_acc
-            model_name = f'{args.model_architecture}_{args.dataset}_{args.model_type}'
-            print(f"Model Name: {model_name}")
-            torch.save(model,f'models/{model_name}.pth')
+            end_time = time.time() - start_time
+            
+            print(f"Epoch: [{epoch + 1}/{args.num_epochs}]\t || Training Loss: {train_loss:.3f}\t || Val Loss: {test_loss:.3f}\t || Training F1-score: {train_f1s:.3f} \t ||  Val F1-score: {test_f1s:.3f} \t || Time: {time.strftime('%H:%M:%S', time.gmtime(end_time))}")
+        
+            if best_model_f1s < test_f1s:
+                best_model_f1s = test_f1s
+                model_name = f'{args.model_architecture}_{args.dataset}_{args.model_type}'
+                print(f"Model Name: {model_name}")
+                torch.save(model,f'models/{model_name}.pth')
+        
+        
