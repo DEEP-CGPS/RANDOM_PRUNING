@@ -45,8 +45,8 @@ def get_dataset(args):
         num_classes = len(trainset.classes)
         
         
-    elif args.dataset == "Tomato_Leaves":
-        data_dir = "./data/Tomato_Leaves"
+    else:
+        data_dir = f'./data/{args.dataset}'
         train_list, test_list, class_names = dataset_list(data_dir)
         num_classes = len(class_names)
         
@@ -80,10 +80,13 @@ def train_epoch(model, device, data_loader, criterion, optimizer, eval_metric, n
         data_loader = Pytorch DataLoader object
         criterion = Pytorch loss function applied to the model
         optimizer = Pytorch optimizer applied to the model
+        eval_metric = Evaluation metric ("accuracy" or Macro "f1_score")
+        num_classes = Number of classes in the dataset
     
     Returns:
         train_loss = float average training loss for one epoch
-        accuracy = float average training accuracy for one epoch
+        train_acc = float average training accuracy for one epoch
+        train_f1 = float training macro F1-score for one epoch
     """
     
     train_correct = 0
@@ -121,7 +124,6 @@ def train_epoch(model, device, data_loader, criterion, optimizer, eval_metric, n
     elif eval_metric == "f1_score":
         total_labels = torch.cat(total_labels, dim=0)
         total_outs = torch.cat(total_outs, dim=0)
-        total_outs[total_outs > num_classes-1] = num_classes-1
         
         train_f1s = multiclass_f1_score(total_outs, total_labels, num_classes = num_classes, average = "macro")
         #accuracy = multiclass_accuracy(total_outs, total_labels, num_classes = num_classes) * 100
@@ -143,10 +145,13 @@ def test_epoch(model, device, data_loader, criterion, eval_metric, num_classes =
         device = torch.device() object to use GPU or CPU during the training
         data_loader = Pytorch DataLoader object
         criterion = Pytorch loss function applied to the model
+        eval_metric = Evaluation metric ("accuracy" or Macro "f1_score")
+        num_classes = Number of classes in the dataset
     
     Returns:
         val_loss = float validation loss for one epoch
-        val_correct = integer number of correct predictions for one epoch
+        val_acc = float average validation accuracy for one epoch
+        val_f1s = float validation macro F1-score for one epoch
     """
     val_loss, val_correct = 0.0, 0
     model.eval()
@@ -179,7 +184,6 @@ def test_epoch(model, device, data_loader, criterion, eval_metric, num_classes =
     elif eval_metric == "f1_score":
         total_labels = torch.cat(total_labels, dim=0)
         total_outs = torch.cat(total_outs, dim=0)
-        total_outs[total_outs > num_classes-1] = num_classes-1
         
         val_f1s = multiclass_f1_score(total_outs.cpu(), total_labels.cpu(), num_classes = num_classes, average = "macro")
         #accuracy = multiclass_accuracy(total_outs, total_labels, num_classes = num_classes) * 100
@@ -191,11 +195,11 @@ def test_epoch(model, device, data_loader, criterion, eval_metric, num_classes =
 ##===================================================================================##
 
 
-def train_model(args,
-                train_loader = None,
+def train_model(train_loader = None,
                 test_loader = None,
                 model = None,
-                num_classes = 0):
+                num_classes = 0,
+                args = None):
     
     if not os.path.exists("models"):
         os.makedirs("models")
