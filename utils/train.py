@@ -15,11 +15,14 @@ from utils.custom_dataset import dataset_list, CustomDataset
 ##===================================================================================##
 
 
-def get_model(args):
+def get_model(num_classes, args):
     if args.model_architecture == "ResNet18":
         model = torchvision.models.resnet18(weights="ResNet18_Weights.DEFAULT")
+        num_fltrs = model.fc.in_features
+        model.fc = nn.Linear(num_fltrs, num_classes)
     elif args.model_architecture == "VGG16":
         model = torchvision.models.vgg16_bn(weights="VGG16_BN_Weights.IMAGENET1K_V1") 
+        model.classifier[6] = nn.Linear(4096,num_classes)
     return model
 
 
