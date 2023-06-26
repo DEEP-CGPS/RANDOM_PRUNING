@@ -31,7 +31,7 @@ def get_model(num_classes, args):
 ##===================================================================================##
 
 
-def get_dataset(args):
+def get_dataset(args, custom_split = 0):
     transform = transforms.Compose(
         [transforms.Resize((224,224)),
          transforms.ToTensor(),
@@ -46,12 +46,23 @@ def get_dataset(args):
         
         
     else:
-        data_dir = f'./data/{args.dataset}'
-        train_list, test_list, class_names = dataset_list(data_dir)
-        num_classes = len(class_names)
-        
-        trainset = CustomDataset(train_list,transform)
-        testset = CustomDataset(test_list,transform)  
+        if custom_split == 0:
+            data_dir = f'./data/{args.dataset}'
+            train_list, test_list, class_names = dataset_list(data_dir)
+            num_classes = len(class_names)
+
+            trainset = CustomDataset(train_list,transform)
+            testset = CustomDataset(test_list,transform)
+            
+        else:
+            data_dir = f'./data/{args.dataset}/'
+            image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x))
+                                                     for x in ["train", "test"]}
+            
+            num_classes = len(image_datasets['train'].classes)
+
+            trainset = CustomDataset(image_datasets['train'],transform)
+            testset = CustomDataset(image_datasets['test'],transform)
         
         
     train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
@@ -201,9 +212,9 @@ def train_model(train_loader = None,
                 num_classes = 0,
                 args = None):
     
-    if not os.path.exists("models"):
-        os.makedirs("models")
-
+    if not os.path.exists(f"models/{args.dataset}"):
+        os.makedirs(f"models/{args.dataset}")
+        
     model.to(args.device)
     
     criterion = nn.CrossEntropyLoss()
@@ -233,7 +244,7 @@ def train_model(train_loader = None,
                 best_model_acc = test_acc
                 model_name = f'{args.model_architecture}_{args.dataset}_{args.model_type}'
                 print(f"Model Name: {model_name}")
-                torch.save(model,f'models/{model_name}.pth')
+                torch.save(model,f'models/{args.dataset}/{model_name}.pth')
             
             
         
@@ -250,6 +261,6 @@ def train_model(train_loader = None,
                 best_model_f1s = test_f1s
                 model_name = f'{args.model_architecture}_{args.dataset}_{args.model_type}'
                 print(f"Model Name: {model_name}")
-                torch.save(model,f'models/{model_name}.pth')
+                torch.save(model,f'models/{args.dataset}/{model_name}.pth')
         
         
