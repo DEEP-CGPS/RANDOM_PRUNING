@@ -56,8 +56,8 @@ def get_dataset(args, custom_split = 0):
             
         else:
             data_dir = f'./data/{args.dataset}/'
-            image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x))
-                                                     for x in ["train", "test"]}
+            image_datasets = {x: torchvision.datasets.ImageFolder(os.path.join(data_dir, x))
+                                                                 for x in ["train", "test"]}
             
             num_classes = len(image_datasets['train'].classes)
 
