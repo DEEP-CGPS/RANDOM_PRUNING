@@ -1,5 +1,5 @@
 from fvcore.nn import FlopCountAnalysis
-from torchsummary import summary
+from torchinfo import summary
 import torch
 from torch import nn
 
@@ -14,7 +14,7 @@ class ModelParams():
         return flops.total()
     
     def get_summary(self):
-        print(summary(self.model, tuple(self.model_input.size()[1:])))
+        print(summary(self.model, tuple(self.model_input.size())))
         
     def get_times_layer(self,layer_type:str="Conv2d")->int:
         count_layers = 0      
