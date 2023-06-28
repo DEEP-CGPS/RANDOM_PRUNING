@@ -15,11 +15,14 @@ from utils.custom_dataset import dataset_list, CustomDataset
 ##===================================================================================##
 
 
-def get_model(args):
+def get_model(num_classes, args):
     if args.model_architecture == "ResNet18":
         model = torchvision.models.resnet18(weights="ResNet18_Weights.DEFAULT")
+        num_fltrs = model.fc.in_features
+        model.fc = nn.Linear(num_fltrs, num_classes)
     elif args.model_architecture == "VGG16":
         model = torchvision.models.vgg16_bn(weights="VGG16_BN_Weights.IMAGENET1K_V1") 
+        model.classifier[6] = nn.Linear(4096,num_classes)
     return model
 
 
@@ -28,7 +31,7 @@ def get_model(args):
 ##===================================================================================##
 
 
-def get_dataset(args):
+def get_dataset(args, custom_split = 0):
     transform = transforms.Compose(
         [transforms.Resize((224,224)),
          transforms.ToTensor(),
@@ -42,13 +45,24 @@ def get_dataset(args):
         num_classes = len(trainset.classes)
         
         
-    elif args.dataset == "Tomato_Leaves":
-        data_dir = "./data/Tomato_Leaves"
-        train_list, test_list, class_names = dataset_list(data_dir)
-        num_classes = len(class_names)
-        
-        trainset = CustomDataset(train_list,transform)
-        testset = CustomDataset(test_list,transform)  
+    else:
+        if custom_split == 0:
+            data_dir = f'./data/{args.dataset}'
+            train_list, test_list, class_names = dataset_list(data_dir)
+            num_classes = len(class_names)
+
+            trainset = CustomDataset(train_list,transform)
+            testset = CustomDataset(test_list,transform)
+            
+        else:
+            data_dir = f'./data/{args.dataset}/'
+            image_datasets = {x: torchvision.datasets.ImageFolder(os.path.join(data_dir, x))
+                                                                 for x in ["train", "test"]}
+            
+            num_classes = len(image_datasets['train'].classes)
+
+            trainset = CustomDataset(image_datasets['train'],transform)
+            testset = CustomDataset(image_datasets['test'],transform)
         
         
     train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
@@ -77,10 +91,13 @@ def train_epoch(model, device, data_loader, criterion, optimizer, eval_metric, n
         data_loader = Pytorch DataLoader object
         criterion = Pytorch loss function applied to the model
         optimizer = Pytorch optimizer applied to the model
+        eval_metric = Evaluation metric ("accuracy" or Macro "f1_score")
+        num_classes = Number of classes in the dataset
     
     Returns:
         train_loss = float average training loss for one epoch
-        accuracy = float average training accuracy for one epoch
+        train_acc = float average training accuracy for one epoch
+        train_f1 = float training macro F1-score for one epoch
     """
     
     train_correct = 0
@@ -118,7 +135,6 @@ def train_epoch(model, device, data_loader, criterion, optimizer, eval_metric, n
     elif eval_metric == "f1_score":
         total_labels = torch.cat(total_labels, dim=0)
         total_outs = torch.cat(total_outs, dim=0)
-        total_outs[total_outs > num_classes-1] = num_classes-1
         
         train_f1s = multiclass_f1_score(total_outs, total_labels, num_classes = num_classes, average = "macro")
         #accuracy = multiclass_accuracy(total_outs, total_labels, num_classes = num_classes) * 100
@@ -140,10 +156,13 @@ def test_epoch(model, device, data_loader, criterion, eval_metric, num_classes =
         device = torch.device() object to use GPU or CPU during the training
         data_loader = Pytorch DataLoader object
         criterion = Pytorch loss function applied to the model
+        eval_metric = Evaluation metric ("accuracy" or Macro "f1_score")
+        num_classes = Number of classes in the dataset
     
     Returns:
         val_loss = float validation loss for one epoch
-        val_correct = integer number of correct predictions for one epoch
+        val_acc = float average validation accuracy for one epoch
+        val_f1s = float validation macro F1-score for one epoch
     """
     val_loss, val_correct = 0.0, 0
     model.eval()
@@ -176,7 +195,6 @@ def test_epoch(model, device, data_loader, criterion, eval_metric, num_classes =
     elif eval_metric == "f1_score":
         total_labels = torch.cat(total_labels, dim=0)
         total_outs = torch.cat(total_outs, dim=0)
-        total_outs[total_outs > num_classes-1] = num_classes-1
         
         val_f1s = multiclass_f1_score(total_outs.cpu(), total_labels.cpu(), num_classes = num_classes, average = "macro")
         #accuracy = multiclass_accuracy(total_outs, total_labels, num_classes = num_classes) * 100
@@ -188,15 +206,15 @@ def test_epoch(model, device, data_loader, criterion, eval_metric, num_classes =
 ##===================================================================================##
 
 
-def train_model(args,
-                train_loader = None,
+def train_model(train_loader = None,
                 test_loader = None,
                 model = None,
-                num_classes = 0):
+                num_classes = 0,
+                args = None):
     
-    if not os.path.exists("models"):
-        os.makedirs("models")
-
+    if not os.path.exists(f"models/{args.dataset}"):
+        os.makedirs(f"models/{args.dataset}")
+        
     model.to(args.device)
     
     criterion = nn.CrossEntropyLoss()
@@ -224,9 +242,9 @@ def train_model(args,
             
             if best_model_acc < test_acc:
                 best_model_acc = test_acc
-                model_name = f'{args.model_architecture}_{args.dataset}_{args.model_type}'
+                model_name = f'{args.model_architecture}_{args.dataset}_{args.method}_{args.model_type}'
                 print(f"Model Name: {model_name}")
-                torch.save(model,f'models/{model_name}.pth')
+                torch.save(model,f'models/{args.dataset}/{model_name}.pth')
             
             
         
@@ -241,8 +259,6 @@ def train_model(args,
         
             if best_model_f1s < test_f1s:
                 best_model_f1s = test_f1s
-                model_name = f'{args.model_architecture}_{args.dataset}_{args.model_type}'
+                model_name = f'{args.model_architecture}_{args.dataset}_{args.method}_{args.model_type}'
                 print(f"Model Name: {model_name}")
-                torch.save(model,f'models/{model_name}.pth')
-        
-        
+                torch.save(model,f'models/{args.dataset}/{model_name}.pth')
