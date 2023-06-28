@@ -242,7 +242,7 @@ def train_model(train_loader = None,
             
             if best_model_acc < test_acc:
                 best_model_acc = test_acc
-                model_name = f'{args.model_architecture}_{args.dataset}_{args.model_type}'
+                model_name = f'{args.model_architecture}_{args.dataset}_{args.method}_{args.model_type}'
                 print(f"Model Name: {model_name}")
                 torch.save(model,f'models/{args.dataset}/{model_name}.pth')
             
@@ -259,8 +259,6 @@ def train_model(train_loader = None,
         
             if best_model_f1s < test_f1s:
                 best_model_f1s = test_f1s
-                model_name = f'{args.model_architecture}_{args.dataset}_{args.model_type}'
+                model_name = f'{args.model_architecture}_{args.dataset}_{args.method}_{args.model_type}'
                 print(f"Model Name: {model_name}")
                 torch.save(model,f'models/{args.dataset}/{model_name}.pth')
-        
-        
