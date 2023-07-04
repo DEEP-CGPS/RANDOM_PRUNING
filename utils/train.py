@@ -70,7 +70,7 @@ def get_dataset(args, custom_split = 0):
     test_loader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size,
                                              shuffle=False, num_workers=0)
         
-    return train_loader,test_loader, num_classes
+    return train_loader,test_loader, num_classes, trainset
  
         
 
