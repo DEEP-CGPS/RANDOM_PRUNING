@@ -10,8 +10,8 @@ import torch.nn.utils.prune as prune
 
 
 def prune_model(model, num_classes = None, train_loader = None, args = None):
-    if not os.path.exists("models"):
-            os.makedirs("models")
+    if not os.path.exists(f"models/{args.dataset}"):
+            os.makedirs(f"models/{args.dataset}")
 
     torch.manual_seed(args.seed)
     pos = 0
